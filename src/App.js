@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
-import FileConverter from './components/FileConverter'; // Import the existing FileConverter component
+import React from 'react';
+import Header from './components/Header'; 
+import FileConverter from './components/FileConverter'; 
+import Footer from './components/Footer'; 
 
 function App() {
   return (
     <div className="App">
-      <FileConverter />
+      <Header /> 
+      <FileConverter /> 
+      <Footer /> 
     </div>
   );
 }
