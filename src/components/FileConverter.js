@@ -1,14 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import '../styles.css';
+import axios from 'axios'; 
+
 function FileConverter() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [outputFormat, setOutputFormat] = useState('mp4');
-  const [isConverting, setIsConverting] = useState(false); // Track conversion state
-  const [conversionError, setConversionError] = useState(null); // Store any conversion errors
+  const [isConverting, setIsConverting] = useState(false);
+  const [conversionError, setConversionError] = useState(null);
+  const [conversionProgress, setConversionProgress] = useState(0); 
 
   const handleFileChange = (event) => {
     setSelectedFile(event.target.files[0]);
-    setConversionError(null); // Reset error message on file selection
+    setConversionError(null); 
   };
 
   const handleFormatChange = (event) => {
@@ -21,63 +24,96 @@ function FileConverter() {
       return;
     }
 
-    setIsConverting(true); // Indicate conversion in progress
+    setIsConverting(true);
+    setConversionError(null);
+    setConversionProgress(0);
 
     try {
-      const reader = new FileReader();
+      const formData = new FormData();
+      formData.append('file', selectedFile); 
 
-      reader.onload = (e) => {
-        const arrayBuffer = e.target.result;
-        const blob = new Blob([arrayBuffer], { type: 'application/octet-stream' });
-        const url = URL.createObjectURL(blob);
+      const apiKey = 'YOUR_API_KEY'; // Replace with your actual API key
 
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${selectedFile.name}.${outputFormat}`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+      const response = await axios.post('https://api.cloudconvert.com/v2/jobs', formData, {
+        headers: {
+          'Authorization': `Bearer ${apiKey}` 
+        }
+      });
 
-        URL.revokeObjectURL(url);
-        setIsConverting(false); // Conversion complete
-        setConversionError(null); // Clear error message
+      const taskId = response.data.id; 
+
+      const getTaskStatus = async () => {
+        try {
+          const taskResponse = await axios.get(`https://api.cloudconvert.com/v2/jobs/${taskId}`, {
+            headers: {
+              'Authorization': `Bearer ${apiKey}` 
+            }
+          });
+
+          const task = taskResponse.data;
+
+          if (task.status === 'finished') {
+            setIsConverting(false); 
+
+            const downloadUrl = task.result.files[0].url; 
+            const downloadLink = document.createElement('a');
+            downloadLink.href = downloadUrl; 
+            downloadLink.download = `${selectedFile.name}.${outputFormat}`;
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink); 
+          } else if (task.status === 'error') {
+            setIsConverting(false);
+            setConversionError('Conversion failed: ' + task.error);
+          } else {
+            if (task.progress) {
+              setConversionProgress(Math.round(task.progress * 100));
+            }
+            setTimeout(getTaskStatus, 1000); // Check status every second
+          }
+        } catch (error) {
+          console.error('Error fetching task status:', error);
+          setIsConverting(false);
+          setConversionError('An error occurred during conversion. Please try again.');
+        }
       };
 
-      reader.readAsArrayBuffer(selectedFile);
+      getTaskStatus(); 
+
     } catch (error) {
-      console.error('Error during conversion:', error);
+      console.error('Error creating conversion task:', error);
+      setIsConverting(false);
       setConversionError('An error occurred during conversion. Please try again.');
-      setIsConverting(false); // Reset conversion state
     }
   };
 
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-4">File Converter</h1>
-      <input
-        type="file"
-        onChange={handleFileChange}
-        disabled={isConverting}
-        className="block w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
-      />
+      <input 
+        type="file" 
+        onChange={handleFileChange} 
+        disabled={isConverting} 
+        className="border p-2" 
+      /> 
       <br />
-      <select
-        value={outputFormat}
-        onChange={handleFormatChange}
-        disabled={isConverting}
-        className="block w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+      <select 
+        value={outputFormat} 
+        onChange={handleFormatChange} 
+        disabled={isConverting} 
+        className="border p-2" 
       >
         <option value="mp4">MP4</option>
         <option value="mp3">MP3</option>
-        {/* Add more options for supported formats */}
+        <option value="mov">MOV</option> 
       </select>
       <br />
-      <button
-        onClick={handleConvert}
-        disabled={isConverting}
-        className="inline-flex items-center px-4 py-2 rounded-md bg-blue-500 text-white font-bold disabled:opacity-50 hover:bg-blue-700"
+      <button 
+        onClick={handleConvert} 
+        disabled={isConverting} 
+        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" 
       >
-        {isConverting ? 'Converting...' : 'Convert'}
+        {isConverting ? `Converting... (${conversionProgress}%)` : 'Convert'} 
       </button>
       {conversionError && <p className="text-red-500">{conversionError}</p>}
     </div>
